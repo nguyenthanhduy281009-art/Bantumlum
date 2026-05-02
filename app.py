@@ -6,30 +6,37 @@ import json
 # Cấu hình giao diện
 st.set_page_config(page_title="Paint Master Pro - Duy", layout="wide")
 
-# Khởi tạo bộ nhớ tạm để lưu vết sơn nếu chưa có
+# --- KHỞI TẠO BỘ NHỚ TẠM (SESSION STATE) ---
 if 'painted_points' not in st.session_state:
     st.session_state.painted_points = []
+if 'bg_data' not in st.session_state:
+    st.session_state.bg_data = ""
 
 # --- SIDEBAR ---
 st.sidebar.title("🎮 Paint Studio")
 uploaded_file = st.sidebar.file_uploader("🖼️ Tải ảnh nền", type=["jpg", "jpeg", "png"])
 
-bg_data = ""
-if uploaded_file:
+# Kiểm tra nếu người dùng vừa tải ảnh mới lên
+if uploaded_file is not None:
     file_bytes = uploaded_file.read()
-    bg_data = f"data:image/png;base64,{base64.b64encode(file_bytes).decode()}"
+    # Lưu vào session_state để không bị mất khi chỉnh slider
+    st.session_state.bg_data = f"data:image/png;base64,{base64.b64encode(file_bytes).decode()}"
+
+# Lấy dữ liệu ảnh từ bộ nhớ tạm
+bg_data = st.session_state.bg_data
 
 p_color = st.sidebar.color_picker("🎨 Màu sơn", "#00F2FF")
 is_rainbow = st.sidebar.checkbox("🌈 Chế độ cầu vồng", value=True)
 p_size = st.sidebar.slider("💧 Kích thước giọt", 5, 30, 15)
 p_power = st.sidebar.slider("🔫 Áp lực phun", 10, 100, 30)
 
-# Nút Reset xóa sạch bộ nhớ tạm
-if st.sidebar.button("Sweep 🧹 RESET MÀN HÌNH"):
+# Nút Reset xóa sạch cả vết sơn và ảnh nền (nếu muốn)
+if st.sidebar.button("🧹 RESET MÀN HÌNH"):
     st.session_state.painted_points = []
+    # st.session_state.bg_data = "" # Bỏ comment dòng này nếu muốn xóa luôn ảnh khi Reset
     st.rerun()
 
-# Chuyển danh sách điểm đã vẽ sang định dạng JSON để truyền vào JavaScript
+# Chuyển danh sách điểm sang JSON
 points_json = json.dumps(st.session_state.painted_points)
 
 # --- CODE HTML/JS ---
@@ -39,7 +46,13 @@ html_code = f"""
 <head>
     <style>
         body, html {{ margin: 0; padding: 0; overflow: hidden; height: 100%; background: #1a1a1a; }}
-        #bg {{ position: fixed; width: 100%; height: 100%; background-image: url('{bg_data}'); background-size: cover; background-position: center; z-index: -1; }}
+        #bg {{ 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background-image: url('{bg_data}'); 
+            background-size: cover; 
+            background-position: center; 
+            z-index: -1; 
+        }}
         canvas {{ position: absolute; top: 0; left: 0; }}
     </style>
 </head>
@@ -56,7 +69,6 @@ html_code = f"""
         
         let width, height;
         let particles = [];
-        // Nhận dữ liệu cũ từ Python
         let savedPoints = {points_json};
 
         function resize() {{
@@ -67,8 +79,8 @@ html_code = f"""
             redrawSavedPoints();
         }}
 
-        // Vẽ lại các điểm cũ ngay khi load
         function redrawSavedPoints() {{
+            if (!savedPoints) return;
             savedPoints.forEach(p => {{
                 pCtx.globalAlpha = 0.8;
                 pCtx.fillStyle = p.color;
@@ -79,6 +91,7 @@ html_code = f"""
             }});
         }}
 
+        // Giữ nguyên logic Drop và emit như cũ ...
         class Drop {{
             constructor(x, y, color, size) {{
                 this.x = x; this.y = y;
@@ -94,10 +107,7 @@ html_code = f"""
                 this.vy += this.gravity;
                 this.x += this.vx; this.y += this.vy;
                 this.life -= 0.02;
-                if (this.life < 0.1) {{
-                    this.stick();
-                    return false;
-                }}
+                if (this.life < 0.1) {{ this.stick(); return false; }}
                 return true;
             }}
             stick() {{
@@ -107,12 +117,6 @@ html_code = f"""
                 pCtx.beginPath();
                 pCtx.arc(this.x, this.y, this.size * 1.5, 0, Math.PI * 2);
                 pCtx.fill();
-                
-                // Gửi điểm mới về Python để lưu vào session_state (ẩn)
-                window.parent.postMessage({{
-                    type: 'new_point',
-                    x: this.x, y: this.y, color: this.color, size: this.size
-                }}, "*");
             }}
             draw() {{
                 fCtx.globalAlpha = this.life;
@@ -149,10 +153,6 @@ html_code = f"""
 </body>
 </html>
 """
-
-# Xử lý nhận dữ liệu từ JavaScript gửi về để lưu vào Session State
-# Lưu ý: Kỹ thuật này sử dụng một "mẹo" nhỏ của Streamlit Components
-# Duy có thể bỏ qua phần lưu điểm nếu cảm thấy app bị chậm khi vẽ quá nhiều.
 
 components.html(html_code, height=700)
 
