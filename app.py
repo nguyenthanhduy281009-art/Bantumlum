@@ -2,50 +2,60 @@ import streamlit as st
 import streamlit.components.v1 as components
 import base64
 
-st.set_page_config(page_title="Fluid Spray - Duy", layout="wide")
+# 1. Cấu hình trang
+st.set_page_config(page_title="Fluid Spray Pro - Duy", layout="wide")
 
-if 'photo_data' not in st.session_state:
-    st.session_state.photo_data = ""
+# 2. Khởi tạo bộ nhớ Session State
+if 'bg_base64' not in st.session_state:
+    st.session_state.bg_base64 = ""
 
 # --- SIDEBAR ---
 st.sidebar.title("🔫 Fluid Spray Studio")
-uploaded_file = st.sidebar.file_uploader("👤 Tải ảnh người cần 'spray'", type=["jpg", "jpeg", "png"])
+uploaded_file = st.sidebar.file_uploader("👤 Tải ảnh người để bắt đầu", type=["jpg", "jpeg", "png"])
 
-if uploaded_file:
-    file_bytes = uploaded_file.read()
-    st.session_state.photo_data = f"data:image/png;base64,{base64.b64encode(file_bytes).decode()}"
+# Xử lý ảnh: Chuyển sang Base64 và lưu lại để không bị mất khi chỉnh slider
+if uploaded_file is not None:
+    try:
+        file_bytes = uploaded_file.read()
+        st.session_state.bg_base64 = base64.b64encode(file_bytes).decode()
+    except Exception as e:
+        st.sidebar.error("Lỗi tải ảnh, Duy thử lại nhé!")
 
-# Duy có thể chỉnh độ mạnh nhẹ của tia bắn ở đây
-spray_power = st.sidebar.slider("🚀 Lực bắn tia nước", 5, 30, 15)
-spray_size = st.sidebar.slider("💧 Kích thước giọt", 2, 15, 6)
+# Thông số bắn
+p_power = st.sidebar.slider("🚀 Lực bắn", 5, 40, 15)
+p_size = st.sidebar.slider("💧 Cỡ giọt", 2, 20, 8)
 
-if st.sidebar.button("🧹 XÓA SẠCH"):
+if st.sidebar.button("🧹 RESET MÀN HÌNH"):
     st.rerun()
 
-# --- HTML/JS: HIỆU ỨNG BẮN HẠT TRẮNG ĐỤC ---
+# --- CHUẨN BỊ DỮ LIỆU ẢNH ---
+img_data = f"data:image/png;base64,{st.session_state.bg_base64}" if st.session_state.bg_base64 else ""
+
+# --- HTML/JS: HIỆU ỨNG BẮN TRẮNG ĐỤC ---
 html_code = f"""
 <!DOCTYPE html>
 <html>
 <head>
     <style>
-        body, html {{ margin: 0; padding: 0; overflow: hidden; height: 100%; background: #000; }}
+        body, html {{ margin: 0; padding: 0; overflow: hidden; height: 100%; background: #111; }}
         #bg {{
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-image: url('{st.session_state.photo_data}');
+            background-image: url('{img_data}');
             background-size: contain; background-repeat: no-repeat; background-position: center;
-            z-index: -1;
+            z-index: 1;
         }}
-        canvas {{ position: absolute; top: 0; left: 0; cursor: crosshair; }}
+        canvas {{ position: absolute; top: 0; left: 0; z-index: 2; cursor: crosshair; }}
     </style>
 </head>
 <body>
     <div id="bg"></div>
-    <canvas id="canvas"></canvas>
+    <canvas id="sprayCanvas"></canvas>
 
     <script>
-        const canvas = document.getElementById('canvas');
+        const canvas = document.getElementById('sprayCanvas');
         const ctx = canvas.getContext('2d');
         let particles = [];
+        let isMouseDown = false;
 
         function resize() {{
             canvas.width = window.innerWidth;
@@ -56,71 +66,59 @@ html_code = f"""
             constructor(x, y) {{
                 this.x = x;
                 this.y = y;
-                // Hiệu ứng bắn tóe: Vận tốc ngẫu nhiên theo mọi hướng
-                this.vx = (Math.random() - 0.5) * {spray_power};
-                this.vy = (Math.random() - 0.5) * {spray_power};
-                this.radius = Math.random() * {spray_size} + 1;
+                // Bắn tỏa ra 360 độ
+                const angle = Math.random() * Math.PI * 2;
+                const velocity = Math.random() * {p_power};
+                this.vx = Math.cos(angle) * velocity;
+                this.vy = Math.sin(angle) * velocity;
+                this.size = Math.random() * {p_size} + 1;
+                this.gravity = 0.3;
                 this.alpha = 1;
-                this.gravity = 0.2; // Trọng lực làm hạt rơi xuống
+                this.decay = Math.random() * 0.015 + 0.005;
             }}
 
             update() {{
+                this.vx *= 0.95; // Lực cản không khí
                 this.vy += this.gravity;
                 this.x += this.vx;
                 this.y += this.vy;
-                this.alpha -= 0.01; // Mờ dần khi bay
+                this.alpha -= this.decay;
             }}
 
             draw() {{
-                // Màu trắng đục (rgba 255, 255, 255 với độ trong suốt)
-                ctx.fillStyle = `rgba(240, 240, 240, ${{this.alpha}})`;
+                ctx.fillStyle = `rgba(255, 255, 245, ${{this.alpha}})`; // Màu trắng đục kem
                 ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
                 ctx.fill();
             }}
         }}
 
-        function createSpray(e) {{
+        function spawn(e) {{
             const x = e.clientX || (e.touches && e.touches[0].clientX);
             const y = e.clientY || (e.touches && e.touches[0].clientY);
-            
-            // Mỗi lần click/di chuyển bắn ra nhiều hạt cùng lúc
-            for (let i = 0; i < 8; i++) {{
+            for(let i=0; i<6; i++) {{
                 particles.push(new Particle(x, y));
             }}
         }}
 
-        window.addEventListener('mousedown', (e) => {{
-            window.isSpraying = true;
-            createSpray(e);
-        }});
-        window.addEventListener('mouseup', () => window.isSpraying = false);
-        window.addEventListener('mousemove', (e) => {{
-            if (window.isSpraying) createSpray(e);
-        }});
+        window.addEventListener('mousedown', (e) => {{ isMouseDown = true; spawn(e); }});
+        window.addEventListener('mouseup', () => isMouseDown = false);
+        window.addEventListener('mousemove', (e) => {{ if(isMouseDown) spawn(e); }});
         
-        window.addEventListener('touchstart', (e) => {{ 
-            window.isSpraying = true; 
-            createSpray(e); 
-        }}, {{passive: false}});
-        window.addEventListener('touchend', () => window.isSpraying = false);
-        window.addEventListener('touchmove', (e) => {{
-            if (window.isSpraying) {{
-                e.preventDefault();
-                createSpray(e);
-            }}
-        }}, {{passive: false}});
+        window.addEventListener('touchstart', (e) => {{ isMouseDown = true; spawn(e); }}, {{passive: false}});
+        window.addEventListener('touchend', () => isMouseDown = false);
+        window.addEventListener('touchmove', (e) => {{ if(isMouseDown) {{ e.preventDefault(); spawn(e); }} }}, {{passive: false}});
 
         function animate() {{
-            // Tạo hiệu ứng vết mờ (trail) để tia nước nhìn mượt hơn
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'; 
-            // Lưu ý: Nếu muốn vết bắn dính lại vĩnh viễn, ta không clearRect toàn bộ
-            // Ở đây mình chọn clear nhẹ để tạo độ mượt
-            
-            for (let i = 0; i < particles.length; i++) {{
+            // Giữ lại vết cũ nhẹ để tạo cảm giác chất lỏng dính
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.02)';
+            // Nếu Duy muốn dính vĩnh viễn thì comment dòng dưới, nhưng sẽ rất lag
+            // ctx.fillRect(0, 0, canvas.width, canvas.height); 
+
+            for(let i=0; i<particles.length; i++) {{
                 particles[i].update();
                 particles[i].draw();
-                if (particles[i].alpha <= 0) {{
+                if(particles[i].alpha <= 0) {{
                     particles.splice(i, 1);
                     i--;
                 }}
@@ -136,6 +134,12 @@ html_code = f"""
 </html>
 """
 
-components.html(html_code, height=700)
+components.html(html_code, height=750)
 
-st.markdown("<h2 style='text-align: center; color: white;'>🚀 SPRAY EFFECT BY NGUYEN THANH DUY</h2>", unsafe_allow_html=True)
+# --- CHÂN TRANG ---
+st.markdown(f"""
+    <div style="text-align: center; margin-top: 10px;">
+        <p style="color: #555;">Duy ơi, nếu ảnh chưa hiện, hãy nhấn chọn file lại lần nữa để trình duyệt ghi nhớ nhé!</p>
+        <h2 style="color: white; background: #FF4B4B; display: inline-block; padding: 10px 20px; border-radius: 10px;">🚀 POWERED BY NGUYEN THANH DUY</h2>
+    </div>
+""", unsafe_allow_html=True)
