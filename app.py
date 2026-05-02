@@ -1,45 +1,38 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import base64
-import json
 
-# Cấu hình giao diện
-st.set_page_config(page_title="Paint Master Pro - Duy", layout="wide")
+# 1. Cấu hình trang
+st.set_page_config(page_title="Paint Master - Nguyen Thanh Duy", layout="wide")
 
-# --- KHỞI TẠO BỘ NHỚ TẠM (SESSION STATE) ---
-if 'painted_points' not in st.session_state:
-    st.session_state.painted_points = []
-if 'bg_data' not in st.session_state:
-    st.session_state.bg_data = ""
+# 2. Khởi tạo Session State để giữ ảnh nền
+if 'bg_base64' not in st.session_state:
+    st.session_state.bg_base64 = ""
 
 # --- SIDEBAR ---
 st.sidebar.title("🎮 Paint Studio")
 uploaded_file = st.sidebar.file_uploader("🖼️ Tải ảnh nền", type=["jpg", "jpeg", "png"])
 
-# Kiểm tra nếu người dùng vừa tải ảnh mới lên
+# Xử lý lưu ảnh vào bộ nhớ bền vững
 if uploaded_file is not None:
     file_bytes = uploaded_file.read()
-    # Lưu vào session_state để không bị mất khi chỉnh slider
-    st.session_state.bg_data = f"data:image/png;base64,{base64.b64encode(file_bytes).decode()}"
+    st.session_state.bg_base64 = base64.b64encode(file_bytes).decode()
 
-# Lấy dữ liệu ảnh từ bộ nhớ tạm
-bg_data = st.session_state.bg_data
-
+# Các thông số điều khiển
 p_color = st.sidebar.color_picker("🎨 Màu sơn", "#00F2FF")
 is_rainbow = st.sidebar.checkbox("🌈 Chế độ cầu vồng", value=True)
 p_size = st.sidebar.slider("💧 Kích thước giọt", 5, 30, 15)
 p_power = st.sidebar.slider("🔫 Áp lực phun", 10, 100, 30)
 
-# Nút Reset xóa sạch cả vết sơn và ảnh nền (nếu muốn)
+# Nút Reset
 if st.sidebar.button("🧹 RESET MÀN HÌNH"):
-    st.session_state.painted_points = []
-    # st.session_state.bg_data = "" # Bỏ comment dòng này nếu muốn xóa luôn ảnh khi Reset
+    # Chỉ cần rerun là canvas tự xóa vì chúng ta không lưu vết sơn vào Python (tránh lag)
     st.rerun()
 
-# Chuyển danh sách điểm sang JSON
-points_json = json.dumps(st.session_state.painted_points)
+# Chuỗi dữ liệu ảnh để đưa vào CSS
+bg_style = f"data:image/png;base64,{st.session_state.bg_base64}" if st.session_state.bg_base64 else ""
 
-# --- CODE HTML/JS ---
+# --- HTML/JS CODE ---
 html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -48,7 +41,7 @@ html_code = f"""
         body, html {{ margin: 0; padding: 0; overflow: hidden; height: 100%; background: #1a1a1a; }}
         #bg {{ 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background-image: url('{bg_data}'); 
+            background-image: url('{bg_style}'); 
             background-size: cover; 
             background-position: center; 
             z-index: -1; 
@@ -67,31 +60,15 @@ html_code = f"""
         const pCtx = pCanvas.getContext('2d');
         const fCtx = fCanvas.getContext('2d');
         
-        let width, height;
-        let particles = [];
-        let savedPoints = {points_json};
+        let width, height, particles = [];
 
         function resize() {{
             width = window.innerWidth;
             height = window.innerHeight;
             pCanvas.width = fCanvas.width = width;
             pCanvas.height = fCanvas.height = height;
-            redrawSavedPoints();
         }}
 
-        function redrawSavedPoints() {{
-            if (!savedPoints) return;
-            savedPoints.forEach(p => {{
-                pCtx.globalAlpha = 0.8;
-                pCtx.fillStyle = p.color;
-                pCtx.filter = 'blur(1px)';
-                pCtx.beginPath();
-                pCtx.arc(p.x, p.y, p.size * 1.5, 0, Math.PI * 2);
-                pCtx.fill();
-            }});
-        }}
-
-        // Giữ nguyên logic Drop và emit như cũ ...
         class Drop {{
             constructor(x, y, color, size) {{
                 this.x = x; this.y = y;
@@ -105,7 +82,8 @@ html_code = f"""
             }}
             update() {{
                 this.vy += this.gravity;
-                this.x += this.vx; this.y += this.vy;
+                this.x += this.vx;
+                this.y += this.vy;
                 this.life -= 0.02;
                 if (this.life < 0.1) {{ this.stick(); return false; }}
                 return true;
@@ -154,12 +132,13 @@ html_code = f"""
 </html>
 """
 
-components.html(html_code, height=700)
+# Hiển thị Game
+components.html(html_code, height=650)
 
 # --- CHÂN TRANG ---
 st.markdown(f"""
     <div style="text-align: center; padding: 20px; border-radius: 15px; background: #1e1e1e; border: 2px solid #FF4B4B; box-shadow: 0 0 15px #FF4B4B; margin-top: 20px;">
         <h2 style="color: #FF4B4B; margin: 0; font-family: sans-serif;">🚀 POWERED BY</h2>
-        <h1 style="color: #FFFFFF; margin: 5px 0; font-size: 40px; text-shadow: 0 0 10px #FF4B4B;">NGUYEN THANH DUY</h1>
+        <h1 style="color: #FFFFFF; margin: 5px 0; font-size: 35px; text-shadow: 0 0 10px #FF4B4B;">NGUYEN THANH DUY</h1>
     </div>
     """, unsafe_allow_html=True)
