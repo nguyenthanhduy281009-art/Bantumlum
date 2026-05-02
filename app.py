@@ -2,27 +2,27 @@ import streamlit as st
 import streamlit.components.v1 as components
 import base64
 
-st.set_page_config(page_title="Pro Spray Source - Duy", layout="wide")
+st.set_page_config(page_title="Custom Spray System - Duy", layout="wide")
 
 if 'bg_base64' not in st.session_state:
     st.session_state.bg_base64 = ""
 
 # --- SIDEBAR ---
-st.sidebar.title("🔫 High-Pressure Spray")
-uploaded_file = st.sidebar.file_uploader("👤 Tải ảnh nền", type=["jpg", "jpeg", "png"])
+st.sidebar.title("🔫 Custom Spray Studio")
+uploaded_file = st.sidebar.file_uploader("👤 Tải ảnh người cần xịt", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
     st.session_state.bg_base64 = base64.b64encode(uploaded_file.read()).decode()
 
-p_power = st.sidebar.slider("🚀 Áp lực vòi xịt", 10, 50, 25)
-p_size = st.sidebar.slider("💧 Cỡ tia nước", 2, 15, 5)
+p_power = st.sidebar.slider("🚀 Áp lực bắn", 10, 60, 35)
+p_size = st.sidebar.slider("💧 Cỡ giọt nước", 2, 20, 8)
 
-if st.sidebar.button("🧹 DỌN SẠCH"):
+if st.sidebar.button("🧹 DỌN DẸP"):
     st.rerun()
 
 img_data = f"data:image/png;base64,{st.session_state.bg_base64}" if st.session_state.bg_base64 else ""
 
-# --- HTML/JS: HIỆU ỨNG XỊT TỪ NGUỒN ---
+# --- HTML/JS: NGUỒN BẮN TỪ DƯỚI ---
 html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -36,10 +36,23 @@ html_code = f"""
             z-index: 1;
         }}
         canvas {{ position: absolute; top: 0; left: 0; z-index: 2; cursor: crosshair; }}
+        
+        /* Hình ảnh nguồn xịt ở dưới */
+        #source-tool {{
+            position: fixed;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            z-index: 3;
+            pointer-events: none;
+        }}
     </style>
 </head>
 <body>
     <div id="bg"></div>
+    <!-- Duy có thể thay link ảnh icon ở dưới nếu muốn hình khác -->
+    <img id="source-tool" src="https://cdn-icons-png.flaticon.com/512/1023/1023656.png" alt="source">
     <canvas id="sprayCanvas"></canvas>
 
     <script>
@@ -55,24 +68,23 @@ html_code = f"""
 
         class Particle {{
             constructor(targetX, targetY) {{
-                // NGUỒN XỊT: Từ giữa cạnh dưới màn hình bắn lên
-                this.x = canvas.width / 2; 
-                this.y = canvas.height;
+                // NGUỒN PHÁT: Ngay tại vị trí cái hình ở dưới
+                this.x = canvas.width / 2;
+                this.y = canvas.height - 50;
                 
-                // Tính toán hướng bắn từ nguồn tới mục tiêu (điểm chuột)
                 const dx = targetX - this.x;
                 const dy = targetY - this.y;
                 const dist = Math.sqrt(dx*dx + dy*dy);
                 
-                // Độ lệch ngẫu nhiên để tia nước nhìn tự nhiên (không bị thẳng đuỗn)
-                const spread = 0.1; 
-                this.vx = (dx / dist) * {p_power} + (Math.random() - 0.5) * {p_power} * spread;
-                this.vy = (dy / dist) * {p_power} + (Math.random() - 0.5) * {p_power} * spread;
+                // Tốc độ bắn cực mạnh
+                const force = {p_power};
+                this.vx = (dx / dist) * force + (Math.random() - 0.5) * 5;
+                this.vy = (dy / dist) * force + (Math.random() - 0.5) * 5;
                 
                 this.size = Math.random() * {p_size} + 2;
-                this.gravity = 0.15;
+                this.gravity = 0.25;
                 this.alpha = 1;
-                this.decay = 0.008;
+                this.decay = 0.01;
             }}
 
             update() {{
@@ -83,7 +95,8 @@ html_code = f"""
             }}
 
             draw() {{
-                ctx.fillStyle = `rgba(255, 255, 250, ${{this.alpha}})`;
+                // Màu trắng đục đặc trưng
+                ctx.fillStyle = `rgba(255, 255, 240, ${{this.alpha}})`;
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
                 ctx.fill();
@@ -106,18 +119,17 @@ html_code = f"""
         window.addEventListener('touchmove', (e) => {{ handleInput(e); e.preventDefault(); }}, {{passive: false}});
 
         function animate() {{
-            // Làm mờ nhẹ vết cũ để tạo hiệu ứng tia nước liên tục
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            // Giữ lại vết bắn để nhìn cho nó "tùm lum"
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.03)';
             // ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             if(mouse.down) {{
-                // Bắn liên tục khi nhấn giữ
-                for(let i=0; i<5; i++) {{
+                for(let i=0; i<7; i++) {{
                     particles.push(new Particle(mouse.x, mouse.y));
                 }}
             }}
 
-            for(let i=0; i<particles.length; i++) {{
+            for(let i = 0; i < particles.length; i++) {{
                 particles[i].update();
                 particles[i].draw();
                 if(particles[i].alpha <= 0) {{
@@ -138,4 +150,4 @@ html_code = f"""
 
 components.html(html_code, height=750)
 
-st.markdown("<h2 style='text-align: center; color: white;'>🔫 NGUYEN THANH DUY - SOURCE SPRAY SYSTEM</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center; color: white;'>🚀 NGUYEN THANH DUY - EXTREME SPRAY</h2>", unsafe_allow_html=True)
