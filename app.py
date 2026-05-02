@@ -143,7 +143,7 @@ html_code = f"""
                 if(!particles[i].update()) {{
                     particles.splice(i, 1);
                     i--;
-                } else {{
+                }} else {{
                     particles[i].draw();
                 }}
             }}
