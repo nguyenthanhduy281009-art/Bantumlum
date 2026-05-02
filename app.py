@@ -2,143 +2,115 @@ import streamlit as st
 import streamlit.components.v1 as components
 import base64
 
-# 1. Cấu hình trang
-st.set_page_config(page_title="Paint Master - Nguyen Thanh Duy", layout="wide")
+# 1. Thiết lập trang
+st.set_page_config(page_title="Paint on Photo - Duy", layout="wide")
 
-# 2. Khởi tạo Session State để giữ ảnh nền
-if 'bg_base64' not in st.session_state:
-    st.session_state.bg_base64 = ""
+# 2. Tạo kho lưu trữ ảnh để không bị mất khi chỉnh Slider
+if 'photo_data' not in st.session_state:
+    st.session_state.photo_data = ""
 
-# --- SIDEBAR ---
-st.sidebar.title("🎮 Paint Studio")
-uploaded_file = st.sidebar.file_uploader("🖼️ Tải ảnh nền", type=["jpg", "jpeg", "png"])
+# --- THANH ĐIỀU KHIỂN (SIDEBAR) ---
+st.sidebar.title("🖌️ App Xịt Sơn")
+st.sidebar.write("Duy hãy tải ảnh người đó về máy rồi chọn ở dưới nhé!")
 
-# Xử lý lưu ảnh vào bộ nhớ bền vững
-if uploaded_file is not None:
+uploaded_file = st.sidebar.file_uploader("👤 Chọn ảnh người", type=["jpg", "jpeg", "png"])
+
+# Nếu Duy chọn ảnh, lưu vào bộ nhớ ngay
+if uploaded_file:
     file_bytes = uploaded_file.read()
-    st.session_state.bg_base64 = base64.b64encode(file_bytes).decode()
+    encoded = base64.b64encode(file_bytes).decode()
+    st.session_state.photo_data = f"data:image/png;base64,{encoded}"
 
-# Các thông số điều khiển
-p_color = st.sidebar.color_picker("🎨 Màu sơn", "#00F2FF")
-is_rainbow = st.sidebar.checkbox("🌈 Chế độ cầu vồng", value=True)
-p_size = st.sidebar.slider("💧 Kích thước giọt", 5, 30, 15)
-p_power = st.sidebar.slider("🔫 Áp lực phun", 10, 100, 30)
+# Các thông số để Duy tùy chỉnh
+p_color = st.sidebar.color_picker("🎨 Màu tia nước", "#FF00E5")
+p_size = st.sidebar.slider("💧 Độ to của giọt", 5, 50, 15)
+p_blur = st.sidebar.slider("✨ Độ nhòe (cho thật)", 0, 20, 10)
 
-# Nút Reset
-if st.sidebar.button("🧹 RESET MÀN HÌNH"):
-    # Chỉ cần rerun là canvas tự xóa vì chúng ta không lưu vết sơn vào Python (tránh lag)
+if st.sidebar.button("🧹 XÓA HẾT SƠN"):
     st.rerun()
 
-# Chuỗi dữ liệu ảnh để đưa vào CSS
-bg_style = f"data:image/png;base64,{st.session_state.bg_base64}" if st.session_state.bg_base64 else ""
-
-# --- HTML/JS CODE ---
+# --- CODE HTML/JS ---
 html_code = f"""
 <!DOCTYPE html>
 <html>
 <head>
     <style>
-        body, html {{ margin: 0; padding: 0; overflow: hidden; height: 100%; background: #1a1a1a; }}
-        #bg {{ 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background-image: url('{bg_style}'); 
-            background-size: cover; 
-            background-position: center; 
-            z-index: -1; 
+        body, html {{ margin: 0; padding: 0; overflow: hidden; height: 100%; background: #000; }}
+        #container {{ position: relative; width: 100vw; height: 100vh; }}
+        #bg-photo {{
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url('{st.session_state.photo_data}');
+            background-size: contain; 
+            background-repeat: no-repeat;
+            background-position: center;
+            z-index: 1;
         }}
-        canvas {{ position: absolute; top: 0; left: 0; }}
+        canvas {{ position: absolute; top: 0; left: 0; z-index: 2; cursor: crosshair; }}
     </style>
 </head>
 <body>
-    <div id="bg"></div>
-    <canvas id="paintCanvas"></canvas>
-    <canvas id="fluidCanvas"></canvas>
+    <div id="container">
+        <div id="bg-photo"></div>
+        <canvas id="paintCanvas"></canvas>
+    </div>
 
     <script>
-        const pCanvas = document.getElementById('paintCanvas');
-        const fCanvas = document.getElementById('fluidCanvas');
-        const pCtx = pCanvas.getContext('2d');
-        const fCtx = fCanvas.getContext('2d');
+        const canvas = document.getElementById('paintCanvas');
+        const ctx = canvas.getContext('2d');
         
-        let width, height, particles = [];
-
         function resize() {{
-            width = window.innerWidth;
-            height = window.innerHeight;
-            pCanvas.width = fCanvas.width = width;
-            pCanvas.height = fCanvas.height = height;
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
         }}
 
-        class Drop {{
-            constructor(x, y, color, size) {{
-                this.x = x; this.y = y;
-                this.size = size * (Math.random() * 0.5 + 0.5);
-                this.color = color;
-                const angle = Math.random() * Math.PI * 2;
-                const force = Math.random() * {p_power / 5};
-                this.vx = Math.cos(angle) * force;
-                this.vy = Math.sin(angle) * force;
-                this.gravity = 0.2; this.life = 1;
-            }}
-            update() {{
-                this.vy += this.gravity;
-                this.x += this.vx;
-                this.y += this.vy;
-                this.life -= 0.02;
-                if (this.life < 0.1) {{ this.stick(); return false; }}
-                return true;
-            }}
-            stick() {{
-                pCtx.globalAlpha = 0.8;
-                pCtx.fillStyle = this.color;
-                pCtx.filter = 'blur(1px)';
-                pCtx.beginPath();
-                pCtx.arc(this.x, this.y, this.size * 1.5, 0, Math.PI * 2);
-                pCtx.fill();
-            }}
-            draw() {{
-                fCtx.globalAlpha = this.life;
-                fCtx.fillStyle = this.color;
-                fCtx.beginPath();
-                fCtx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                fCtx.fill();
-            }}
+        let drawing = false;
+
+        function start(e) {{
+            drawing = true;
+            draw(e);
         }}
 
-        function emit(e) {{
-            const x = e.touches ? e.touches[0].clientX : e.clientX;
-            const y = e.touches ? e.touches[0].clientY : e.clientY;
-            const color = {str(is_rainbow).lower()} ? `hsl(${{Math.random() * 360}}, 80%, 60%)` : '{p_color}';
-            for(let i=0; i<5; i++) particles.push(new Drop(x, y, color, {p_size}));
+        function stop() {{
+            drawing = false;
+            ctx.beginPath();
         }}
 
-        window.addEventListener('mousedown', emit);
-        window.addEventListener('mousemove', (e) => {{ if(e.buttons === 1) emit(e); }});
-        window.addEventListener('touchmove', emit);
+        function draw(e) {{
+            if (!drawing) return;
+            
+            const x = e.clientX || (e.touches && e.touches[0].clientX);
+            const y = e.clientY || (e.touches && e.touches[0].clientY);
+
+            ctx.lineWidth = {p_size};
+            ctx.strokeStyle = '{p_color}';
+            
+            // Làm cho tia nước trông "thật" hơn, không bị giả
+            ctx.shadowBlur = {p_blur};
+            ctx.shadowColor = '{p_color}';
+
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        }}
+
+        canvas.addEventListener('mousedown', start);
+        canvas.addEventListener('mouseup', stop);
+        canvas.addEventListener('mousemove', draw);
+        
+        canvas.addEventListener('touchstart', (e) => {{ e.preventDefault(); start(e); }});
+        canvas.addEventListener('touchend', stop);
+        canvas.addEventListener('touchmove', (e) => {{ e.preventDefault(); draw(e); }});
+
         window.addEventListener('resize', resize);
         resize();
-
-        function frame() {{
-            fCtx.clearRect(0, 0, width, height);
-            for(let i=0; i<particles.length; i++) {{
-                if(!particles[i].update()) {{ particles.splice(i, 1); i--; }}
-                else particles[i].draw();
-            }}
-            requestAnimationFrame(frame);
-        }}
-        frame();
     </script>
 </body>
 </html>
 """
 
-# Hiển thị Game
-components.html(html_code, height=650)
+components.html(html_code, height=700)
 
-# --- CHÂN TRANG ---
-st.markdown(f"""
-    <div style="text-align: center; padding: 20px; border-radius: 15px; background: #1e1e1e; border: 2px solid #FF4B4B; box-shadow: 0 0 15px #FF4B4B; margin-top: 20px;">
-        <h2 style="color: #FF4B4B; margin: 0; font-family: sans-serif;">🚀 POWERED BY</h2>
-        <h1 style="color: #FFFFFF; margin: 5px 0; font-size: 35px; text-shadow: 0 0 10px #FF4B4B;">NGUYEN THANH DUY</h1>
-    </div>
-    """, unsafe_allow_html=True)
+st.markdown(f"<h2 style='text-align: center; color: white;'>🚀 POWERED BY NGUYEN THANH DUY</h2>", unsafe_allow_html=True)
