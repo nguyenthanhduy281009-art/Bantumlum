@@ -1,12 +1,23 @@
 import streamlit as st
 import streamlit.components.v1 as components
+import base64
 
-# Cấu hình trang rộng toàn màn hình
-st.set_page_config(page_title="Fluid Magic - Duy", layout="wide")
+st.set_page_config(page_title="Fluid Magic - Custom BG", layout="wide")
 
-# --- GIAO DIỆN ĐIỀU KHIỂN CỦA STREAMLIT ---
 st.sidebar.title("🎨 Bảng Điều Khiển")
-bg_url = st.sidebar.text_input("Dán link ảnh nền (URL):", placeholder="https://example.com/background.jpg")
+
+# --- CHỨC NĂNG TẢI ẢNH TỪ BỘ SƯU TẬP ---
+uploaded_file = st.sidebar.file_uploader("Chọn ảnh từ bộ sưu tập của bạn", type=["jpg", "jpeg", "png"])
+
+# Xử lý ảnh để đưa vào code HTML
+bg_image_data = ""
+if uploaded_file is not None:
+    # Chuyển ảnh sang dạng Base64 để nhúng trực tiếp vào HTML
+    file_bytes = uploaded_file.read()
+    encoded = base64.b64encode(file_bytes).decode()
+    bg_image_data = f"data:image/png;base64,{encoded}"
+
+# Các tùy chỉnh khác
 p_color = st.sidebar.color_picker("Chọn màu chất lỏng:", "#FF4B4B")
 is_random = st.sidebar.checkbox("Sử dụng màu cầu vồng", value=True)
 p_power = st.sidebar.slider("Độ mạnh tia nước:", 5, 50, 15)
@@ -20,7 +31,7 @@ html_code = f"""
         body, html {{ margin: 0; padding: 0; overflow: hidden; height: 100%; }}
         #bg {{
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-image: url('{bg_url}');
+            background-image: url('{bg_image_data}');
             background-color: #1a1a1a;
             background-size: cover; background-position: center;
             z-index: -1;
@@ -31,19 +42,17 @@ html_code = f"""
 <body>
     <div id="bg"></div>
     <canvas id="canvas"></canvas>
-
     <script>
+        // ... (Giữ nguyên logic xử lý hạt giống như code cũ mình đã đưa) ...
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         let particles = [];
-
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
         class Particle {{
             constructor(x, y, color) {{
-                this.x = x;
-                this.y = y;
+                this.x = x; this.y = y;
                 this.size = Math.random() * 10 + 2;
                 this.speedX = Math.random() * 8 - 4;
                 this.speedY = Math.random() * 8 - 4;
@@ -74,11 +83,9 @@ html_code = f"""
                 particles.push(new Particle(x, y, color));
             }}
         }}
-
         window.addEventListener('mousedown', spawn);
         window.addEventListener('mousemove', (e) => {{ if(e.buttons === 1) spawn(e) }});
         window.addEventListener('touchmove', spawn);
-
         function animate() {{
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             for (let i = 0; i < particles.length; i++) {{
@@ -94,17 +101,7 @@ html_code = f"""
 </html>
 """
 
-# Hiển thị Game
 components.html(html_code, height=600)
 
-# --- CHÂN TRANG SIÊU NỔI BẬT ---
-st.markdown(
-    f"""
-    <div style="text-align: center; padding: 20px; border-radius: 15px; background: #1e1e1e; border: 2px solid #FF4B4B; box-shadow: 0 0 15px #FF4B4B; margin-top: 20px;">
-        <h2 style="color: #FF4B4B; margin: 0; font-family: sans-serif;">🚀 POWERED BY</h2>
-        <h1 style="color: #FFFFFF; margin: 5px 0; font-size: 40px; text-shadow: 0 0 10px #FF4B4B;">NGUYEN THANH DUY</h1>
-        <p style="color: #AAAAAA;">Dữ liệu & Logic cập nhật Meta 2026</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+# --- CHÂN TRANG ---
+st.markdown("<h1 style='text-align: center; color: #FF4B4B;'>🚀 POWERED BY NGUYEN THANH DUY</h1>", unsafe_allow_html=True)
