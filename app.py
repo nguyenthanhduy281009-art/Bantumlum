@@ -2,27 +2,29 @@ import streamlit as st
 import streamlit.components.v1 as components
 import base64
 
-st.set_page_config(page_title="Custom Spray System - Duy", layout="wide")
+# 1. Cấu hình trang
+st.set_page_config(page_title="Refined Spray - Duy", layout="wide")
 
 if 'bg_base64' not in st.session_state:
     st.session_state.bg_base64 = ""
 
 # --- SIDEBAR ---
-st.sidebar.title("🔫 Custom Spray Studio")
-uploaded_file = st.sidebar.file_uploader("👤 Tải ảnh người cần xịt", type=["jpg", "jpeg", "png"])
+st.sidebar.title("🔫 Refined Spray Studio")
+uploaded_file = st.sidebar.file_uploader("👤 Tải ảnh người", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
     st.session_state.bg_base64 = base64.b64encode(uploaded_file.read()).decode()
 
-p_power = st.sidebar.slider("🚀 Áp lực bắn", 10, 60, 35)
-p_size = st.sidebar.slider("💧 Cỡ giọt nước", 2, 20, 8)
+# Cho phép Duy chỉnh độ ít/nhiều của tia bắn
+spray_density = st.sidebar.slider("📉 Lượng tia bắn", 1, 5, 2)
+p_size = st.sidebar.slider("💧 Cỡ giọt", 1, 10, 4)
 
-if st.sidebar.button("🧹 DỌN DẸP"):
+if st.sidebar.button("🧹 DỌN SẠCH"):
     st.rerun()
 
 img_data = f"data:image/png;base64,{st.session_state.bg_base64}" if st.session_state.bg_base64 else ""
 
-# --- HTML/JS: NGUỒN BẮN TỪ DƯỚI ---
+# --- HTML/JS ---
 html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -37,22 +39,15 @@ html_code = f"""
         }}
         canvas {{ position: absolute; top: 0; left: 0; z-index: 2; cursor: crosshair; }}
         
-        /* Hình ảnh nguồn xịt ở dưới */
         #source-tool {{
-            position: fixed;
-            bottom: -20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 120px;
-            z-index: 3;
-            pointer-events: none;
+            position: fixed; bottom: -10px; left: 50%; transform: translateX(-50%);
+            width: 80px; z-index: 3; pointer-events: none; opacity: 0.9;
         }}
     </style>
 </head>
 <body>
     <div id="bg"></div>
-    <!-- Duy có thể thay link ảnh icon ở dưới nếu muốn hình khác -->
-    <img id="source-tool" src="https://cdn-icons-png.flaticon.com/512/1023/1023656.png" alt="source">
+    <img id="source-tool" src="https://cdn-icons-png.flaticon.com/512/1023/1023656.png">
     <canvas id="sprayCanvas"></canvas>
 
     <script>
@@ -68,23 +63,22 @@ html_code = f"""
 
         class Particle {{
             constructor(targetX, targetY) {{
-                // NGUỒN PHÁT: Ngay tại vị trí cái hình ở dưới
                 this.x = canvas.width / 2;
-                this.y = canvas.height - 50;
+                this.y = canvas.height - 40;
                 
                 const dx = targetX - this.x;
                 const dy = targetY - this.y;
                 const dist = Math.sqrt(dx*dx + dy*dy);
                 
-                // Tốc độ bắn cực mạnh
-                const force = {p_power};
-                this.vx = (dx / dist) * force + (Math.random() - 0.5) * 5;
-                this.vy = (dy / dist) * force + (Math.random() - 0.5) * 5;
+                // Tốc độ bay nhanh nhưng mảnh hơn
+                const force = 25; 
+                this.vx = (dx / dist) * force + (Math.random() - 0.5) * 3;
+                this.vy = (dy / dist) * force + (Math.random() - 0.5) * 3;
                 
-                this.size = Math.random() * {p_size} + 2;
-                this.gravity = 0.25;
+                this.size = Math.random() * {p_size} + 1;
+                this.gravity = 0.2;
                 this.alpha = 1;
-                this.decay = 0.01;
+                this.decay = 0.012; // Biến mất nhanh hơn để không bị đầy màn hình
             }}
 
             update() {{
@@ -95,8 +89,7 @@ html_code = f"""
             }}
 
             draw() {{
-                // Màu trắng đục đặc trưng
-                ctx.fillStyle = `rgba(255, 255, 240, ${{this.alpha}})`;
+                ctx.fillStyle = `rgba(255, 255, 250, ${{this.alpha}})`;
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
                 ctx.fill();
@@ -119,12 +112,12 @@ html_code = f"""
         window.addEventListener('touchmove', (e) => {{ handleInput(e); e.preventDefault(); }}, {{passive: false}});
 
         function animate() {{
-            // Giữ lại vết bắn để nhìn cho nó "tùm lum"
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.03)';
-            // ctx.fillRect(0, 0, canvas.width, canvas.height);
-
+            // Xóa vết cũ chậm hơn một chút để giữ lại ít dấu vết "nghệ thuật"
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.04)';
+            
             if(mouse.down) {{
-                for(let i=0; i<7; i++) {{
+                // Chỉ bắn ra số lượng hạt theo slider 'spray_density'
+                for(let i=0; i<{spray_density}; i++) {{
                     particles.push(new Particle(mouse.x, mouse.y));
                 }}
             }}
@@ -150,4 +143,4 @@ html_code = f"""
 
 components.html(html_code, height=750)
 
-st.markdown("<h2 style='text-align: center; color: white;'>🚀 NGUYEN THANH DUY - EXTREME SPRAY</h2>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; color: #444;'>Thiết kế bởi Nguyen Thanh Duy</h3>", unsafe_allow_html=True)
