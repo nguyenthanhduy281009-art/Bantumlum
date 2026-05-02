@@ -3,26 +3,34 @@ import streamlit.components.v1 as components
 import base64
 
 # 1. Cấu hình trang
-st.set_page_config(page_title="Refined Spray - Duy", layout="wide")
+st.set_page_config(page_title="Slow Spray Pro - Duy", layout="wide")
 
+# 2. Khởi tạo bộ nhớ Session State
 if 'bg_base64' not in st.session_state:
     st.session_state.bg_base64 = ""
+if 'tool_base64' not in st.session_state:
+    st.session_state.tool_base64 = ""
 
 # --- SIDEBAR ---
-st.sidebar.title("🔫 Refined Spray Studio")
-uploaded_file = st.sidebar.file_uploader("👤 Tải ảnh người", type=["jpg", "jpeg", "png"])
+st.sidebar.title("🔫 Slow-Motion Spray")
 
-if uploaded_file:
-    st.session_state.bg_base64 = base64.b64encode(uploaded_file.read()).decode()
+bg_file = st.sidebar.file_uploader("👤 1. Tải ảnh người", type=["jpg", "jpeg", "png"])
+if bg_file:
+    st.session_state.bg_base64 = base64.b64encode(bg_file.read()).decode()
 
-# Cho phép Duy chỉnh độ ít/nhiều của tia bắn
-spray_density = st.sidebar.slider("📉 Lượng tia bắn", 1, 5, 2)
-p_size = st.sidebar.slider("💧 Cỡ giọt", 1, 10, 4)
+tool_file = st.sidebar.file_uploader("🍌 2. Tải ảnh vòi xịt", type=["jpg", "jpeg", "png"])
+if tool_file:
+    st.session_state.tool_base64 = base64.b64encode(tool_file.read()).decode()
 
-if st.sidebar.button("🧹 DỌN SẠCH"):
+# Thanh chỉnh để Duy tùy biến thêm nếu muốn
+p_speed = st.sidebar.slider("🐢 Tốc độ bắn (Thấp = Chậm)", 5, 20, 12)
+p_size = st.sidebar.slider("💧 Cỡ giọt", 1, 8, 3)
+
+if st.sidebar.button("🧹 RESET"):
     st.rerun()
 
 img_data = f"data:image/png;base64,{st.session_state.bg_base64}" if st.session_state.bg_base64 else ""
+tool_data = f"data:image/png;base64,{st.session_state.tool_base64}" if st.session_state.tool_base64 else "https://cdn-icons-png.flaticon.com/512/11496/11496732.png"
 
 # --- HTML/JS ---
 html_code = f"""
@@ -40,14 +48,14 @@ html_code = f"""
         canvas {{ position: absolute; top: 0; left: 0; z-index: 2; cursor: crosshair; }}
         
         #source-tool {{
-            position: fixed; bottom: -10px; left: 50%; transform: translateX(-50%);
-            width: 80px; z-index: 3; pointer-events: none; opacity: 0.9;
+            position: fixed; bottom: -5px; left: 50%; transform: translateX(-50%);
+            width: 70px; z-index: 3; pointer-events: none;
         }}
     </style>
 </head>
 <body>
     <div id="bg"></div>
-    <img id="source-tool" src="https://cdn-icons-png.flaticon.com/512/1023/1023656.png">
+    <img id="source-tool" src="{tool_data}">
     <canvas id="sprayCanvas"></canvas>
 
     <script>
@@ -55,6 +63,7 @@ html_code = f"""
         const ctx = canvas.getContext('2d');
         let particles = [];
         let mouse = {{ x: 0, y: 0, down: false }};
+        let frameCounter = 0;
 
         function resize() {{
             canvas.width = window.innerWidth;
@@ -70,15 +79,15 @@ html_code = f"""
                 const dy = targetY - this.y;
                 const dist = Math.sqrt(dx*dx + dy*dy);
                 
-                // Tốc độ bay nhanh nhưng mảnh hơn
-                const force = 25; 
-                this.vx = (dx / dist) * force + (Math.random() - 0.5) * 3;
-                this.vy = (dy / dist) * force + (Math.random() - 0.5) * 3;
+                // Tốc độ bắn đã được giảm xuống theo ý Duy
+                const force = {p_speed}; 
+                this.vx = (dx / dist) * force + (Math.random() - 0.5) * 2;
+                this.vy = (dy / dist) * force + (Math.random() - 0.5) * 2;
                 
                 this.size = Math.random() * {p_size} + 1;
-                this.gravity = 0.2;
+                this.gravity = 0.12; // Rơi chậm hơn một chút
                 this.alpha = 1;
-                this.decay = 0.012; // Biến mất nhanh hơn để không bị đầy màn hình
+                this.decay = 0.008; // Giữ hạt tồn tại lâu hơn trên màn hình
             }}
 
             update() {{
@@ -89,7 +98,7 @@ html_code = f"""
             }}
 
             draw() {{
-                ctx.fillStyle = `rgba(255, 255, 250, ${{this.alpha}})`;
+                ctx.fillStyle = `rgba(255, 255, 248, ${{this.alpha}})`;
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
                 ctx.fill();
@@ -112,12 +121,13 @@ html_code = f"""
         window.addEventListener('touchmove', (e) => {{ handleInput(e); e.preventDefault(); }}, {{passive: false}});
 
         function animate() {{
-            // Xóa vết cũ chậm hơn một chút để giữ lại ít dấu vết "nghệ thuật"
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.04)';
+            // Giữ lại vết bắn mờ mờ trên ảnh
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.02)';
             
             if(mouse.down) {{
-                // Chỉ bắn ra số lượng hạt theo slider 'spray_density'
-                for(let i=0; i<{spray_density}; i++) {{
+                frameCounter++;
+                // Cứ mỗi 3 khung hình mới bắn 1 lần (để tia bắn chậm và ít lại)
+                if (frameCounter % 3 === 0) {{
                     particles.push(new Particle(mouse.x, mouse.y));
                 }}
             }}
@@ -142,5 +152,3 @@ html_code = f"""
 """
 
 components.html(html_code, height=750)
-
-st.markdown("<h3 style='text-align: center; color: #444;'>Thiết kế bởi Nguyen Thanh Duy</h3>", unsafe_allow_html=True)
